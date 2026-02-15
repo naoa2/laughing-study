@@ -5,45 +5,51 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
 
-// Cloudinary設定 (画像倉庫)
+// 外部サービス連携（RenderのEnvironment Variablesで設定）
 cloudinary.config({ 
   cloud_name: process.env.C_NAME, 
   api_key: process.env.C_KEY, 
   api_secret: process.env.C_SECRET 
 });
-
-// Supabase/PostgreSQL設定 (文字倉庫)
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL, 
+  ssl: { rejectUnauthorized: false } 
+});
 
 app.use(express.static('public'));
-app.use(express.json({limit: '100mb'})); // 超大容量OK
+app.use(express.json({limit: '100mb'}));
 
 io.on('connection', async (socket) => {
-    // 1. 接続時にDBから全投稿を取得（文字数制限なし）
-    const res = await pool.query('SELECT * FROM posts ORDER BY id DESC');
+    // 初回同期（最新100件）
+    const res = await pool.query('SELECT * FROM posts ORDER BY id DESC LIMIT 100');
     socket.emit('sync-all', res.rows);
 
-    // 2. 新規投稿（画像はCloudinaryへ飛ばす）
+    // 新規投稿処理（画像はCloudinaryへ）
     socket.on('save-log', async (data) => {
         let finalImg = data.i;
         if(data.i && data.i.startsWith('data:image')) {
-            const uploadRes = await cloudinary.uploader.upload(data.i, { folder: "school_bbs" });
-            finalImg = uploadRes.secure_url; // 外部URLに変換
+            const up = await cloudinary.uploader.upload(data.i, { folder: "bbs" });
+            finalImg = up.secure_url;
         }
-        
-        const ins = await pool.query(
-            'INSERT INTO posts (n, m, i, d, points) VALUES ($1, $2, $3, $4, 0) RETURNING *',
+        await pool.query(
+            'INSERT INTO posts (n, m, i, d, points) VALUES ($1, $2, $3, $4, 0)',
             [data.n, data.m, finalImg, data.d]
         );
-        const all = await pool.query('SELECT * FROM posts ORDER BY id DESC');
-        io.emit('sync-all', all.rows);
+        const refresh = await pool.query('SELECT * FROM posts ORDER BY id DESC LIMIT 100');
+        io.emit('sync-all', refresh.rows);
     });
 
-    // 3. Reddit風「いいね」機能
+    // Reddit風：いいね機能
     socket.on('vote', async (id) => {
         await pool.query('UPDATE posts SET points = points + 1 WHERE id = $1', [id]);
-        const all = await pool.query('SELECT * FROM posts ORDER BY id DESC');
-        io.emit('sync-all', all.rows);
+        const refresh = await pool.query('SELECT * FROM posts ORDER BY id DESC LIMIT 100');
+        io.emit('sync-all', refresh.rows);
+    });
+
+    socket.on('admin-del', async (id) => {
+        await pool.query('DELETE FROM posts WHERE id = $1', [id]);
+        const refresh = await pool.query('SELECT * FROM posts ORDER BY id DESC LIMIT 100');
+        io.emit('sync-all', refresh.rows);
     });
 });
 
