@@ -2,70 +2,146 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>技術資料：JavaScriptにおける非同期処理の検討</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Study Notes</title>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 緊急回避キー (Esc) でGoogleへ飛ばす */
-        .boss-is-coming { display: none; }
+        :root { --main-c: #2c3e50; }
+        body { margin: 0; min-height: 100vh; display: flex; justify-content: center; align-items: center; background: var(--main-c); font-family: sans-serif; transition: 0.5s; overflow-x: hidden; }
+        .hide { display: none !important; }
+        #layer-a { text-align: center; cursor: pointer; width: 100%; }
+        .box-a { padding: 40px; width: 80%; max-width: 500px; background: white; border-radius: 20px; margin: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        #text-disp { font-size: 1.2rem; font-weight: bold; min-height: 100px; display: flex; align-items: center; justify-content: center; color: #333; }
+        #entry-point { position: fixed; bottom: 20px; right: 20px; opacity: 0.3; background: none; border: 1px solid white; color: white; border-radius: 10px; cursor: pointer; padding: 5px 10px; font-size: 0.7rem; }
+        #layer-b { width: 95%; max-width: 700px; background: #fff; padding: 20px; border-radius: 15px; margin: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); align-self: flex-start; }
+        .form-g { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 10px; background: #fdfdfd; }
+        input, textarea { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
+        .btn-s { padding: 12px; background: #34495e; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .row-item { display: flex; gap: 15px; padding: 15px; border-bottom: 1px solid #f0f0f0; transition: 0.2s; }
+        .row-item:hover { background: #fafafa; }
+        .vote-box { text-align: center; min-width: 45px; background: #f8f9fa; border-radius: 8px; padding: 5px; height: fit-content; }
+        .row-img { max-width: 100%; border-radius: 10px; margin-top: 10px; border: 1px solid #eee; cursor: zoom-in; }
+        #layer-c { background: #000 !important; color: #0f0 !important; font-family: monospace; padding: 20px; border-radius: 15px; width: 95%; max-height: 80vh; overflow-y: auto; }
+        .m-item { border: 1px solid #0f0; padding: 10px; margin-bottom: 8px; cursor: pointer; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
-    <!-- ヘッダーをStack Overflow風にして偽装 -->
-    <nav class="bg-orange-500 h-1 border-t-4 border-orange-600"></nav>
-    <header class="bg-white shadow-sm p-4 flex justify-between items-center">
-        <h1 class="font-bold text-xl text-gray-700">Dev-Protocol Docs</h1>
-        <span id="clock" class="text-sm text-gray-400"></span>
-    </header>
+<body onclick="refreshMsg()">
 
-    <main class="max-w-4xl mx-auto mt-10 p-6 bg-white border rounded shadow-sm">
-        <!-- 投稿フォーム -->
-        <div class="mb-8 border-b pb-6">
-            <textarea id="postInput" class="w-full p-3 border rounded shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="新しい知見を共有..."></textarea>
-            <button onclick="sendPost()" class="mt-2 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">データを送信</button>
+    <div id="layer-a">
+        <div class="box-a">
+            <div id="text-disp">Academic System Booting...</div>
+            <div id="author-disp" style="color:#888; font-size:0.9rem; margin-top:10px;"></div>
         </div>
+        <button id="entry-point" onclick="startModule(event)">STUDY_LOG</button>
+    </div>
 
-        <!-- 掲示板本体 -->
-        <div id="posts" class="space-y-6"></div>
-    </main>
+    <div id="layer-b" class="hide" onclick="event.stopPropagation()">
+        <h2 style="font-size:1.2rem; border-left: 5px solid var(--main-c); padding-left: 10px;"><span id="trigger-m" onclick="m_tap()">👥</span> Global Knowledge Archive</h2>
+        <div id="auth-g" class="form-g">
+            <input type="text" id="uid" placeholder="UID (Display Name)">
+            <input type="password" id="upw" placeholder="TOKEN (Secret Key)">
+            <button class="btn-s" onclick="process_auth()">Decrypt & Access</button>
+        </div>
+        <div id="work-area" class="hide">
+            <div class="form-g">
+                <textarea id="msg-input" placeholder="Share your insights... (No limit)"></textarea>
+                <div style="font-size: 0.8rem; color: #666;">Attach Image (Unlimited Storage):</div>
+                <input type="file" id="img-input" accept="image/*">
+                <button class="btn-s" onclick="save_log()">Publish to Network</button>
+                <button onclick="location.reload()" style="font-size:0.7rem; border:none; background:none; cursor:pointer; color:#999;">Terminate Session</button>
+            </div>
+            <div id="data-list"></div>
+        </div>
+    </div>
+
+    <div id="layer-c" class="hide" onclick="event.stopPropagation()">
+        <h3>[ROOT_SYSTEM_OVERRIDE]</h3>
+        <div id="m-log-list"></div><hr>
+        <button onclick="f_reset()" style="background:red; color:white; width:100%; border:none; padding:10px; cursor:pointer;">PURGE_ALL_DATA</button>
+        <button onclick="location.reload()" style="width:100%; margin-top:10px;">EXIT_ROOT</button>
+    </div>
 
     <script>
         const socket = io();
-        const postInput = document.getElementById('postInput');
-        const postsDiv = document.getElementById('posts');
+        const K1 = "bmViYTcy"; // neba72
+        const K2 = "bmViYW5lYmE3Mg=="; // nebaneba72
+        const quotes = [{t:"知識は力なり", a:"ベーコン"},{t:"想像力は知識よりも重要だ", a:"アインシュタイン"},{t:"継続は力なり", a:"格言"}];
+        let tc = 0; let tt;
 
-        // リアルタイム更新
-        socket.on('update-posts', (data) => {
-            postsDiv.innerHTML = data.map(p => `
-                <div class="p-4 border-l-4 border-blue-500 bg-gray-50 rounded-r shadow-sm">
-                    <div class="flex items-start">
-                        <div class="flex flex-col items-center mr-4 bg-white p-2 border rounded">
-                            <button onclick="vote(${p.id})" class="text-xl">▲</button>
-                            <span class="font-bold text-lg">${p.points}</span>
-                        </div>
-                        <div class="flex-1">
-                            <p class="text-lg mb-2">${p.text}</p>
-                            <div class="text-xs text-gray-400">ID: ${p.id} · 返信 · 共有 · 修正</div>
-                        </div>
+        function refreshMsg(){
+            const q = quotes[Math.floor(Math.random()*quotes.length)];
+            document.getElementById('text-disp').innerText = `「${q.t}」`;
+            document.getElementById('author-disp').innerText = `― ${q.a}`;
+            document.body.style.background = ['#2c3e50','#2980b9','#27ae60','#16a085'][Math.floor(Math.random()*4)];
+        }
+
+        function startModule(e){
+            e.stopPropagation();
+            if(prompt("System Key?") === atob(K1)){
+                document.getElementById('layer-a').className = 'hide';
+                document.getElementById('layer-b').className = '';
+                document.body.style.background = "#f0f2f5";
+                document.title = "Google Drive - My Archive"; // 偽装
+            }
+        }
+
+        function process_auth(){
+            const id = document.getElementById('uid').value;
+            if(!id) return;
+            window._u = id;
+            document.getElementById('auth-g').className = 'hide';
+            document.getElementById('work-area').className = '';
+        }
+
+        socket.on('sync-all', (posts) => {
+            const l = document.getElementById('data-list');
+            l.innerHTML = posts.map(x=>`
+                <div class="row-item">
+                    <div class="vote-box">
+                        <button onclick="vote(${x.id})" style="border:none;background:none;cursor:pointer;font-size:1.2rem;">▲</button>
+                        <div>${x.points || 0}</div>
                     </div>
-                </div>
-            `).join('');
+                    <div style="flex:1">
+                        <b>${x.n}</b> <small style="color:#aaa;">${x.d}</small><br>
+                        <div style="white-space:pre-wrap; margin-top:5px; color:#333;">${x.m}</div>
+                        ${x.i?`<a href="${x.i}" target="_blank"><img src="${x.i}" class="row-img"></a>`:''}
+                    </div>
+                </div>`).join('');
+            document.getElementById('m-log-list').innerHTML = posts.map(x => `<div class="m-item" onclick="f_del(${x.id})">${x.n}: ${x.m.substring(0,20)}... [DELETE]</div>`).join('');
         });
 
-        function sendPost() {
-            if(!postInput.value) return;
-            socket.emit('new-post', { text: postInput.value });
-            postInput.value = '';
+        function save_log(){
+            const m = document.getElementById('msg-input').value;
+            const f = document.getElementById('img-input').files[0];
+            if(!m && !f) return;
+            const run = (i)=> {
+                socket.emit('save-log', {n:window._u, m, i, d:new Date().toLocaleString()});
+                document.getElementById('msg-input').value="";
+                document.getElementById('img-input').value="";
+            };
+            if(f){ const r=new FileReader(); r.onload=(e)=>run(e.target.result); r.readAsDataURL(f); }
+            else run(null);
         }
 
-        function vote(id) {
-            socket.emit('vote', id);
+        function vote(id){ socket.emit('vote', id); }
+
+        function m_tap(){
+            tc++; clearTimeout(tt);
+            if(tc>=3){
+                tc=0; if(prompt("Root Access?")===atob(K2)){
+                    document.getElementById('layer-b').className='hide';
+                    document.getElementById('layer-c').className='';
+                }
+            }
+            tt = setTimeout(()=>tc=0, 500);
         }
 
-        // 緊急回避：EscキーでGoogleへ
-        document.addEventListener('keydown', (e) => {
-            if(e.key === 'Escape') window.location.href = 'https://www.google.com';
-        });
+        function f_del(id){ if(confirm("DELETE?")) socket.emit('admin-del', id); }
+
+        // 緊急回避: EscキーでGoogleへ
+        window.addEventListener('keydown', (e) => { if(e.key === 'Escape') window.location.href = 'https://www.google.com'; });
+
+        refreshMsg();
     </script>
 </body>
 </html>
