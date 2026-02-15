@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>技術資料：JavaScriptにおける非同期処理の検討</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 緊急回避キー (Esc) でGoogleへ飛ばす */
+        .boss-is-coming { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <!-- ヘッダーをStack Overflow風にして偽装 -->
+    <nav class="bg-orange-500 h-1 border-t-4 border-orange-600"></nav>
+    <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+        <h1 class="font-bold text-xl text-gray-700">Dev-Protocol Docs</h1>
+        <span id="clock" class="text-sm text-gray-400"></span>
+    </header>
+
+    <main class="max-w-4xl mx-auto mt-10 p-6 bg-white border rounded shadow-sm">
+        <!-- 投稿フォーム -->
+        <div class="mb-8 border-b pb-6">
+            <textarea id="postInput" class="w-full p-3 border rounded shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-400" placeholder="新しい知見を共有..."></textarea>
+            <button onclick="sendPost()" class="mt-2 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">データを送信</button>
+        </div>
+
+        <!-- 掲示板本体 -->
+        <div id="posts" class="space-y-6"></div>
+    </main>
+
+    <script>
+        const socket = io();
+        const postInput = document.getElementById('postInput');
+        const postsDiv = document.getElementById('posts');
+
+        // リアルタイム更新
+        socket.on('update-posts', (data) => {
+            postsDiv.innerHTML = data.map(p => `
+                <div class="p-4 border-l-4 border-blue-500 bg-gray-50 rounded-r shadow-sm">
+                    <div class="flex items-start">
+                        <div class="flex flex-col items-center mr-4 bg-white p-2 border rounded">
+                            <button onclick="vote(${p.id})" class="text-xl">▲</button>
+                            <span class="font-bold text-lg">${p.points}</span>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-lg mb-2">${p.text}</p>
+                            <div class="text-xs text-gray-400">ID: ${p.id} · 返信 · 共有 · 修正</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        });
+
+        function sendPost() {
+            if(!postInput.value) return;
+            socket.emit('new-post', { text: postInput.value });
+            postInput.value = '';
+        }
+
+        function vote(id) {
+            socket.emit('vote', id);
+        }
+
+        // 緊急回避：EscキーでGoogleへ
+        document.addEventListener('keydown', (e) => {
+            if(e.key === 'Escape') window.location.href = 'https://www.google.com';
+        });
+    </script>
+</body>
+</html>
